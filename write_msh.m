@@ -74,7 +74,7 @@ function id = getpointid(entity, p)
             break
         end
     end
-    assert(id~=0, 'not a valid point entity with these coordinates.')
+    assert(id~=0, sprintf('not a valid point entity with these coordinates: (%0.3f, %0.3f)', p(1), p(2)));
 end
 
 function write_point_entity(fid, vertices, data, tag)
