@@ -57,3 +57,44 @@ function v = extractboundarycomponent(p)
         count = count + 1;
     end
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function V_3D = extrude_boundary_edges(V_2D, N_pts)
+    % V_2D: [m x 2] array of 2D edge node indices (e.g., from extractboundary)
+    % N_pts: Total number of vertices in the 2D plane (offset for the 5-deg plane)
+    % V_3D: [2*m x 3] array of 3D triangle node indices
+    
+    m = size(V_2D, 1);
+    V_3D = zeros(m * 2, 3);
+    
+    % Base nodes
+    n1 = V_2D(:, 1);
+    n2 = V_2D(:, 2);
+    
+    % Top nodes (5-degree plane)
+    n1_top = n1 + N_pts;
+    n2_top = n2 + N_pts;
+    
+    % Split the extruded quadrilateral into two triangles
+    % Triangle 1: [n1, n2, n1_top]
+    V_3D(1:2:end, :) = [n1, n2, n1_top];
+    
+    % Triangle 2: [n2, n2_top, n1_top]
+    V_3D(2:2:end, :) = [n2, n2_top, n1_top];
+end

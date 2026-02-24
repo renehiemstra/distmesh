@@ -53,6 +53,15 @@ function entity = write_entities(fid, vertices, entity, physobj)
             surfacetag = surfacetag + 1;
         end
     end
+    volumetag = 1;
+    for i=1:length(entity)
+        if entity(i).dim == 3
+            physobjtag = getphysicalobjectid(physobj, entity(i).physobj);
+            write_volume_entity(fid, vertices, entity(i).data, volumetag, physobjtag);
+            entity(i).tag = volumetag;
+            volumetag = volumetag + 1;
+        end
+    end
     fprintf(fid,'%s\n', '$EndEntities');
 end
 
@@ -154,39 +163,34 @@ end
 function write_vertices(fid, vertices, entity, boundary)
     fprintf(fid,'%s\n', '$Nodes');
     n = size(vertices,1);
-    fprintf(fid,'%d %d %d %d\n', length(entity), n, 1, n);
+    
+    % Find the 3D volume entity tag to associate these nodes with
+    vol_tag = 1; % Fallback
     for i=1:length(entity)
-        if entity(i).dim == 0
-            data = entity(i).data;
-            fprintf(fid,'%d %d %d %d\n', entity(i).dim, entity(i).tag, 0, size(data,1));
-            fprintf(fid, '%d\n', getnodeid(vertices, data, 1e-5));
-            fprintf(fid,'%5.5f %5.5f %5.5f\n', data(1), data(2), data(3));
-        elseif entity(i).dim == 1
-            data = entity(i).data;
-            fprintf(fid,'%d %d %d %d\n', entity(i).dim, entity(i).tag, 0, size(data,1)-1);
-            for j=2:size(data,1)
-                fprintf(fid,'%d\n', data(j,1));
-            end
-            for j=2:size(data,1)
-                k = data(j,1);
-                fprintf(fid,'%5.5f %5.5f %5.5f\n', vertices(k,1), vertices(k,2), vertices(k,3));
-            end
-        elseif entity(i).dim == 2
-            fprintf(fid,'%d %d %d %d\n', entity(i).dim, entity(i).tag, 0, n - length(boundary));
-            % node tags
-            for j=1:size(vertices,1)
-                if ismember(j, boundary)==false
-                    fprintf(fid,'%d\n', j);
-                end
-            end
-            % % node coordinates
-            for j=1:size(vertices,1)
-                if ismember(j, boundary)==false
-                    fprintf(fid,'%5.5f %5.5f %5.5f\n', vertices(j,1), vertices(j,2), vertices(j,3));
-                end
-            end
+        if entity(i).dim == 3
+            vol_tag = entity(i).tag;
+            break;
         end
     end
+    
+    % 1. Write the main node block header
+    % Format: numEntityBlocks numNodes minNodeTag maxNodeTag
+    fprintf(fid,'1 %d 1 %d\n', n, n);
+    
+    % 2. Write the single entity block header
+    % Format: entityDim entityTag parametric numNodesInBlock
+    fprintf(fid,'3 %d 0 %d\n', vol_tag, n);
+    
+    % 3. Write all node tags sequentially
+    for i=1:n
+        fprintf(fid,'%d\n', i);
+    end
+    
+    % 4. Write all node coordinates
+    for i=1:n
+        fprintf(fid,'%5.8f %5.8f %5.8f\n', vertices(i,1), vertices(i,2), vertices(i,3));
+    end
+    
     fprintf(fid,'%s\n', '$EndNodes');
 end
 
@@ -230,7 +234,20 @@ end
 
 function tag = write_element_group(fid, entity, tag)
     [m, n] = size(entity.data);
-    fprintf(fid,'%d %d %d %d\n', entity.dim, entity.tag, n-1, m);
+    
+    % Determine Gmsh Element Type correctly
+    if n == 2
+        elem_type = 1; % Line
+    elseif n == 3
+        elem_type = 2; % Triangle
+    elseif n == 4
+        elem_type = 4; % Tetrahedron (Gmsh type 4)
+    else
+        error('Unknown element type');
+    end
+    
+    fprintf(fid,'%d %d %d %d\n', entity.dim, entity.tag, elem_type, m);
+    
     data = entity.data;
     switch entity.dim
         case 1
@@ -243,7 +260,31 @@ function tag = write_element_group(fid, entity, tag)
                 fprintf(fid,'%d %d %d %d\n', tag, data(i,1), data(i,2), data(i,3));
                 tag = tag + 1;
             end
+        case 3
+            for i=1:m
+                fprintf(fid,'%d %d %d %d %d\n', tag, data(i,1), data(i,2), data(i,3), data(i,4));
+                tag = tag + 1;
+            end
         otherwise
             error('not implemented.');
     end
+end
+
+function write_volume_entity(fid, vertices, data, tag, physobjtag)
+    a = min(vertices(data(:), :));
+    b = max(vertices(data(:), :));
+    a1 = sprintf('%0.5f', a(1)); a2 = sprintf('%0.5f', a(2)); a3 = sprintf('%0.5f', a(3));
+    b1 = sprintf('%0.5f', b(1)); b2 = sprintf('%0.5f', b(2)); b3 = sprintf('%0.5f', b(3));
+    s = sprintf('%d', tag);
+    fprintf(fid,'%s%*s %s%*s %s%*s %s%*s %s%*s %s%*s %s%*s %d %d %d\n',...
+        s, 8-length(s), '', ...
+        a1, 12-length(a1), '', ...
+        a2, 12-length(a2), '', ...
+        a3, 12-length(a3), '', ...
+        b1, 12-length(b1), '', ...
+        b2, 12-length(b2), '', ...
+        b3, 12-length(b3), '', ...
+        1, ...         % numPhysicalTags
+        physobjtag, ...% physicalTag
+        0);            % numBoundaries (set to 0 for simplicity)
 end
