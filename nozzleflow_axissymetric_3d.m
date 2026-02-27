@@ -185,298 +185,193 @@ mesh.boundary = bpts;
 % number of mesh vertices
 N_pts = size(mesh.vertices, 1);
 
-% add physical objects
-mesh.physobj(1).name = 'volume';
-mesh.physobj(1).dim = 2;
-mesh.physobj(1).tag = 1;
+% --- 1. DEFINE BOUNDARY TOPOLOGY ---
+% Format: {Name, Start Point, End Point, is_symmetry_axis}
+bnd_defs = {
+    {'symmetry',           Q(1,:)',  Q(6,:)',  true},
+    {'reservoir-right',    Q(6,:)',  Q(21,:)', false},
+    {'reservoir-top',      Q(21,:)', Q(19,:)', false},
+    {'reservoir-left',     Q(19,:)', Q(16,:)', false},
+    {'channel-top-right',  Q(16,:)', Q(15,:)', false},
+    {'channel-top-center', Q(15,:)', Q(14,:)', false},
+    {'channel-top-left',   Q(14,:)', Q(13,:)', false},
+    {'channel-inflow',     Q(13,:)', Q(1,:)',  false}
+};
 
-mesh.physobj(2).name = 'symmetry';
-mesh.physobj(2).dim = 1;
-mesh.physobj(2).tag = 2;
-
-mesh.physobj(3).name = 'reservoir-top';
-mesh.physobj(3).dim = 1;
-mesh.physobj(3).tag = 3;
-
-mesh.physobj(4).name = 'reservoir-left';
-mesh.physobj(4).dim = 1;
-mesh.physobj(4).tag = 4;
-
-mesh.physobj(5).name = 'reservoir-right';
-mesh.physobj(5).dim = 1;
-mesh.physobj(5).tag = 5;
-
-mesh.physobj(6).name = 'channel-top-right';
-mesh.physobj(6).dim = 1;
-mesh.physobj(6).tag = 6;
-
-mesh.physobj(7).name = 'channel-top-center';
-mesh.physobj(7).dim = 1;
-mesh.physobj(7).tag = 7;
-
-mesh.physobj(8).name = 'channel-top-left';
-mesh.physobj(8).dim = 1;
-mesh.physobj(8).tag = 8;
-
-mesh.physobj(9).name = 'channel-inflow';
-mesh.physobj(9).dim = 1;
-mesh.physobj(9).tag = 9;
-
-% add mesh entities
-% mesh points
-% bq = [1,2,3,4,5,6,12,18,21,20,19,16,15,14,13];
-bq = [1,6,21,19,16,15,14,13];
-k = 0;
-for i=bq
-    k = k+1;
-    mesh.entity(k).dim = 0;
-    mesh.entity(k).data = [Q(i,1) Q(i,2) 0];
-end
-
-% mesh lines
-tol = 1e-5;
-
-mesh.entity(k+1).dim = 1;
-mesh.entity(k+1).data = extractboundary(mesh, Q(1,:)', Q(6,:)', tol);
-mesh.entity(k+1).physobj = 'symmetry';
-
-mesh.entity(k+2).dim = 1;
-mesh.entity(k+2).data = extractboundary(mesh, Q(6,:)', Q(21,:)', tol);
-mesh.entity(k+2).physobj = 'reservoir-right';
-mesh.entity(k+2).fdata = extrude_boundary_edges(mesh.entity(k+2).data, N_pts);
-
-mesh.entity(k+3).dim = 1;
-mesh.entity(k+3).data = extractboundary(mesh, Q(21,:)', Q(19,:)', tol);
-mesh.entity(k+3).physobj = 'reservoir-top';
-mesh.entity(k+3).fdata = extrude_boundary_edges(mesh.entity(k+3).data, N_pts);
-
-mesh.entity(k+4).dim = 1;
-mesh.entity(k+4).data = extractboundary(mesh, Q(19,:)', Q(16,:)', tol);
-mesh.entity(k+4).physobj = 'reservoir-left';
-mesh.entity(k+4).fdata = extrude_boundary_edges(mesh.entity(k+4).data, N_pts);
-
-mesh.entity(k+5).dim = 1;
-mesh.entity(k+5).data = extractboundary(mesh, Q(16,:)', Q(15,:)', tol);
-mesh.entity(k+5).physobj = 'channel-top-right';
-mesh.entity(k+5).fdata = extrude_boundary_edges(mesh.entity(k+5).data, N_pts);
-
-mesh.entity(k+6).dim = 1;
-mesh.entity(k+6).data = extractboundary(mesh, Q(15,:)', Q(14,:)', tol);
-mesh.entity(k+6).physobj = 'channel-top-center';
-mesh.entity(k+6).fdata = extrude_boundary_edges(mesh.entity(k+6).data, N_pts);
-
-mesh.entity(k+7).dim = 1;
-mesh.entity(k+7).data = extractboundary(mesh, Q(14,:)', Q(13,:)', tol);
-mesh.entity(k+7).physobj = 'channel-top-left';
-mesh.entity(k+7).fdata = extrude_boundary_edges(mesh.entity(k+7).data, N_pts);
-
-mesh.entity(k+8).dim = 1;
-mesh.entity(k+8).data = extractboundary(mesh, Q(13,:)', Q(1,:)', tol);
-mesh.entity(k+8).physobj = 'channel-inflow';
-mesh.entity(k+8).fdata = extrude_boundary_edges(mesh.entity(k+8).data, N_pts);
-
-% --- 1. GENERATE 3D VERTICES AND COLLAPSE AXIS NODES ---
 angle_deg = 5;
 angle_rad = angle_deg * pi / 180;
-P1 = mesh.vertices; % 0 degree plane
-P2 = zeros(size(P1));
-P2(:,1) = P1(:,1);                     
-P2(:,2) = P1(:,2) * cos(angle_rad);    
-P2(:,3) = P1(:,2) * sin(angle_rad);    
+N_pts = size(mesh.vertices, 1);
+tol = 1e-5;
 
+mesh.entity = [];
+k = 0; % Entity counter
+
+% --- 2. GENERATE 0D POINTS ---
+bq = [1,6,21,19,16,15,14,13];
+for i = bq
+    % 0-degree point
+    k = k+1; 
+    mesh.entity(k).dim = 0; 
+    mesh.entity(k).data = [Q(i,1), Q(i,2), 0]; 
+    mesh.entity(k).physobj = sprintf('pt-%d-0deg', i);
+    
+    % 5-degree point
+    k = k+1; 
+    mesh.entity(k).dim = 0; 
+    mesh.entity(k).data = [Q(i,1), Q(i,2)*cos(angle_rad), Q(i,2)*sin(angle_rad)]; 
+    mesh.entity(k).physobj = sprintf('pt-%d-5deg', i);
+end
+
+% --- 3. GENERATE 1D LINES AND 2D SURFACES ---
+for i = 1:length(bnd_defs)
+    name = bnd_defs{i}{1}; pA = bnd_defs{i}{2}; pB = bnd_defs{i}{3}; is_sym = bnd_defs{i}{4};
+    
+    L_0deg = extractboundary(mesh, pA, pB, tol);
+    L_5deg = L_0deg + N_pts;
+    
+    % 1D line on 0-deg plane
+    k = k+1; mesh.entity(k).dim = 1; mesh.entity(k).data = L_0deg; mesh.entity(k).physobj = [name '-line-0deg'];
+    
+    if ~is_sym
+        % 1D line on 5-deg plane
+        k = k+1; mesh.entity(k).dim = 1; mesh.entity(k).data = L_5deg; mesh.entity(k).physobj = [name '-line-5deg'];
+        % 2D Extruded Surface connecting them
+        k = k+1; mesh.entity(k).dim = 2; mesh.entity(k).data = extrude_boundary_edges(L_0deg, N_pts); mesh.entity(k).physobj = name;
+    end
+end
+
+% --- 4. 3D VERTICES & TETRAHEDRA (With orientation preservation) ---
+P1 = mesh.vertices; 
+P2 = zeros(size(P1)); P2(:,1) = P1(:,1); P2(:,2) = P1(:,2)*cos(angle_rad); P2(:,3) = P1(:,2)*sin(angle_rad);    
 P_3D_raw = [P1; P2];
 
-% The 'stable' flag is crucial: it keeps the original 2D node IDs perfectly intact!
-% `ic` will map the duplicate 5-deg axis nodes safely back to the 0-deg axis nodes.
+% Deduplicate vertices along the axis
 ndigits = 8;
 [mesh.vertices, ~, ic] = unique(round(P_3D_raw, ndigits), 'rows', 'stable');
 
-% --- 2. GENERATE 3D TETRAHEDRA ---
 nelms_2D = size(T, 1);
 T_3D_raw = zeros(nelms_2D * 3, 4);
 tet_count = 1;
 for i = 1:nelms_2D
-    base_nodes = sort(T(i, :)); % Sort to prevent diagonal mismatch
-    n1 = base_nodes(1); n2 = base_nodes(2); n3 = base_nodes(3);
-    n1_top = n1 + N_pts; n2_top = n2 + N_pts; n3_top = n3 + N_pts;
+    base_nodes = T(i, :);
+    [~, min_idx] = min(base_nodes);
+    if min_idx == 1,     n1 = base_nodes(1); n2 = base_nodes(2); n3 = base_nodes(3);
+    elseif min_idx == 2, n1 = base_nodes(2); n2 = base_nodes(3); n3 = base_nodes(1);
+    else,                n1 = base_nodes(3); n2 = base_nodes(1); n3 = base_nodes(2); end
     
-    T_3D_raw(tet_count, :)   = [n1, n2, n3, n1_top];
-    T_3D_raw(tet_count+1, :) = [n2, n3, n1_top, n2_top];
-    T_3D_raw(tet_count+2, :) = [n3, n1_top, n2_top, n3_top];
+    n1_t = n1 + N_pts; n2_t = n2 + N_pts; n3_t = n3 + N_pts;
+    if n2 < n3
+        T_3D_raw(tet_count,:) = [n1, n2, n3, n1_t]; T_3D_raw(tet_count+1,:) = [n2, n3, n1_t, n2_t]; T_3D_raw(tet_count+2,:) = [n3, n1_t, n2_t, n3_t];
+    else
+        T_3D_raw(tet_count,:) = [n1, n2, n3, n1_t]; T_3D_raw(tet_count+1,:) = [n2, n3, n1_t, n3_t]; T_3D_raw(tet_count+2,:) = [n2, n1_t, n2_t, n3_t];
+    end
     tet_count = tet_count + 3;
 end
 
-% Map node IDs to the deduplicated list
-T_3D = ic(T_3D_raw);
+% --- 5. ADD SYMMETRY PLANES & VOLUME ---
+k = k+1; mesh.entity(k).dim = 2; mesh.entity(k).data = [T(:,1), T(:,3), T(:,2)]; mesh.entity(k).physobj = 'sym-0deg';
+k = k+1; mesh.entity(k).dim = 2; mesh.entity(k).data = T + N_pts; mesh.entity(k).physobj = 'sym-5deg';
+k = k+1; mesh.entity(k).dim = 3; mesh.entity(k).data = T_3D_raw; mesh.entity(k).physobj = 'volume';
 
-% Filter out degenerate tetrahedra (zero-volume elements caused by axis collapse)
-valid_tets = sum(diff(sort(T_3D, 2), 1, 2) == 0, 2) == 0;
-T_3D = T_3D(valid_tets, :);
-
-% --- 3. UPDATE PHYSICAL GROUPS ---
-mesh.physobj(1).dim = 3; 
-mesh.physobj(10).name = 'sym-0deg'; mesh.physobj(10).dim = 2; mesh.physobj(10).tag = 10;
-mesh.physobj(11).name = 'sym-5deg'; mesh.physobj(11).dim = 2; mesh.physobj(11).tag = 11;
-
-% --- 4. UPGRADE BOUNDARY ENTITIES TO 3D ---
+% --- 6. APPLY DEDUPLICATION MAPPING AND FILTER DEGENERATES ---
+valid_entities = true(length(mesh.entity), 1);
 for i = 1:length(mesh.entity)
-    if isfield(mesh.entity(i), 'fdata') && ~isempty(mesh.entity(i).fdata)
-        % Map nodes to deduplicated list
-        faces_3D = ic(mesh.entity(i).fdata);
-        
-        % Filter out degenerate faces (triangles that collapsed into lines at the axis)
-        valid_faces = sum(diff(sort(faces_3D, 2), 1, 2) == 0, 2) == 0;
-        
-        mesh.entity(i).dim = 2;
-        mesh.entity(i).data = faces_3D(valid_faces, :);
-        mesh.entity(i).bctag = []; 
+    if mesh.entity(i).dim == 0
+        % Snap to deduplicated coordinates
+        mesh.entity(i).data = round(mesh.entity(i).data, ndigits);
+        % If this is a 5-deg point and it lies on the axis (y=0), drop it to avoid duplicates
+        if abs(mesh.entity(i).data(2)) < 1e-10 && contains(mesh.entity(i).physobj, '5deg')
+            valid_entities(i) = false; 
+        end
+    else
+        mapped_data = ic(mesh.entity(i).data);
+        if mesh.entity(i).dim == 1
+            valid = mapped_data(:,1) ~= mapped_data(:,2); % Drop lines that collapsed to points
+            mesh.entity(i).data = mapped_data(valid, :);
+        else
+            valid = sum(diff(sort(mapped_data, 2), 1, 2) == 0, 2) == 0; % Drop surfaces/volumes that collapsed to lines/surfaces
+            mesh.entity(i).data = mapped_data(valid, :);
+        end
+        if isempty(mesh.entity(i).data)
+            valid_entities(i) = false;
+        end
     end
+    mesh.entity(i).bctag = []; 
 end
+mesh.entity = mesh.entity(valid_entities); % Remove empty entities
 
-% Clean up 'fdata' from the ENTIRE struct array at once
-if isfield(mesh.entity, 'fdata')
-    mesh.entity = rmfield(mesh.entity, 'fdata');
-end
-
-idx = length(mesh.entity) + 1;
-
-% Add 0-degree symmetry plane
-mesh.entity(idx).dim = 2;
-mesh.entity(idx).data = ic([T(:,1), T(:,3), T(:,2)]); 
-mesh.entity(idx).bctag = [];
-mesh.entity(idx).physobj = 'sym-0deg';
-idx = idx + 1;
-
-% Add 5-degree symmetry plane
-mesh.entity(idx).dim = 2;
-mesh.entity(idx).data = ic(T + N_pts); 
-mesh.entity(idx).bctag = [];
-mesh.entity(idx).physobj = 'sym-5deg';
-
-% --- Robustly assign the 3D tetrahedra to the 'volume' entity ---
-vol_idx = [];
+% --- 7. DYNAMICALLY BUILD PHYSICAL OBJECTS ---
+% This cleanly prevents Gmsh element dimension mismatch errors forever!
+mesh.physobj = [];
+p_tag = 1;
 for i = 1:length(mesh.entity)
-    % Safely check if the field exists and isn't empty before comparing
     if isfield(mesh.entity(i), 'physobj') && ~isempty(mesh.entity(i).physobj)
-        if strcmp(mesh.entity(i).physobj, 'volume')
-            vol_idx = i;
-            break;
+        phys_name = mesh.entity(i).physobj;
+        % Add it only if we haven't already defined this physical group
+        if isempty(mesh.physobj) || ~any(strcmp({mesh.physobj.name}, phys_name))
+            mesh.physobj(p_tag).name = phys_name;
+            mesh.physobj(p_tag).dim = mesh.entity(i).dim;
+            mesh.physobj(p_tag).tag = p_tag;
+            p_tag = p_tag + 1;
         end
     end
 end
 
-% If it was accidentally deleted from the array, create a new one
-if isempty(vol_idx)
-    vol_idx = length(mesh.entity) + 1;
-    mesh.entity(vol_idx).physobj = 'volume';
-end
-
-% Update the volume to 3D
-mesh.entity(vol_idx).dim = 3;
-mesh.entity(vol_idx).data = T_3D;
-mesh.entity(vol_idx).bctag = [];
-
-% Finally, write the mesh!
+% Write the Gmsh file
 write_msh(mesh, 'nozzleflow_3D.msh');
 
-%% plot boundaries
-colors = [0 0.4470 0.7410; 
-          0.8500 0.3250 0.0980;
-          0.9290 0.6940 0.1250; 
-          0.4940 0.1840 0.5560;
-          0.4660 0.6740 0.1880;
-          0.3010 0.7450 0.9330;
-          0.6350 0.0780 0.1840;
-          0 0 1
-          0 1 0;
-          1 0 0];
-z = 1;
-for i=1:length(mesh.entity)
-    if mesh.entity(i).dim == 1
-        v = mesh.entity(i).data;
-        plot(P(v(:), 1), P(v(:), 2), 'Color', colors(z,:), 'LineWidth',4);
-        z = z + 1;
-    end
-end
-
-
-
-%% 3D Boundary Visualization
-% 1. Compute 3D coordinates (0-degree plane and 5-degree plane)
-angle_deg = 5;
-angle_rad = angle_deg * pi / 180;
-
-P1 = mesh.vertices; % 0 degree plane [x, y, 0]
-P2 = zeros(size(P1));
-P2(:,1) = P1(:,1);                     % x stays the same
-P2(:,2) = P1(:,2) * cos(angle_rad);    % y rotates
-P2(:,3) = P1(:,2) * sin(angle_rad);    % z rotates
-
-P_3D = [P1; P2];
-
-% 2. Plot the 3D boundary faces
-figure('Name', '3D Boundary Faces Verification', 'Color', 'w');
+%% 8. 3D VISUALIZATION IN MATLAB
+figure('Name', '3D Full Topology Verification', 'Color', 'w');
 hold on; grid on; view(3);
 
-% Plot the extruded boundaries
+colors = [0 0.4470 0.7410; 0.8500 0.3250 0.0980; 0.9290 0.6940 0.1250; 
+          0.4940 0.1840 0.5560; 0.4660 0.6740 0.1880; 0.3010 0.7450 0.9330;
+          0.6350 0.0780 0.1840; 0 0 1; 0 1 0; 1 0 0];
 z_color = 1;
+
 for i = 1:length(mesh.entity)
-    % Check if this entity has extruded 3D faces
-    if isfield(mesh.entity(i), 'fdata') && ~isempty(mesh.entity(i).fdata)
+    % Plot 2D Surfaces
+    if mesh.entity(i).dim == 2
+        faces = mesh.entity(i).data;
+        alpha_val = 0.9;
+        if contains(mesh.entity(i).physobj, 'sym')
+            alpha_val = 0.10; % Extremely transparent sym planes so we can see inside
+        end
+        patch('Vertices', mesh.vertices, 'Faces', faces, 'FaceColor', colors(z_color,:), ...
+              'EdgeColor', 'none', 'FaceAlpha', alpha_val, 'DisplayName', mesh.entity(i).physobj);
+        z_color = mod(z_color, size(colors,1)) + 1;
         
-        faces = mesh.entity(i).fdata;
+    % Plot 1D Lines (Boundaries)
+    elseif mesh.entity(i).dim == 1
+        edges = mesh.entity(i).data;
+        X = [mesh.vertices(edges(:,1), 1), mesh.vertices(edges(:,2), 1)]';
+        Y = [mesh.vertices(edges(:,1), 2), mesh.vertices(edges(:,2), 2)]';
+        Z = [mesh.vertices(edges(:,1), 3), mesh.vertices(edges(:,2), 3)]';
+        line(X, Y, Z, 'Color', 'k', 'LineWidth', 2, 'HandleVisibility', 'off');
         
-        % Draw the 3D patches
-        patch('Vertices', P_3D, 'Faces', faces, ...
-              'FaceColor', colors(z_color,:), ...
-              'EdgeColor', 'k', ...
-              'FaceAlpha', 0.8, ... % Slight transparency
-              'DisplayName', mesh.entity(i).physobj);
-          
-        z_color = mod(z_color, size(colors,1)) + 1; % Cycle colors safely
+    % Plot 0D Points (Corners)
+    elseif mesh.entity(i).dim == 0
+        pt = mesh.entity(i).data;
+        plot3(pt(1), pt(2), pt(3), 'ko', 'MarkerSize', 6, 'MarkerFaceColor', 'y', 'HandleVisibility', 'off');
     end
 end
 
-% Plot the 0-degree and 5-degree symmetry planes for context (light grey/transparent)
-% 0-deg plane is just the original triangulation T
-patch('Vertices', P_3D, 'Faces', T, ...
-      'FaceColor', [0.8 0.8 0.8], 'EdgeColor', 'none', ...
-      'FaceAlpha', 0.2, 'DisplayName', '0-deg Sym Plane');
-
-% 5-deg plane is the shifted triangulation T + N_pts
-patch('Vertices', P_3D, 'Faces', T + N_pts, ...
-      'FaceColor', [0.6 0.6 0.6], 'EdgeColor', 'none', ...
-      'FaceAlpha', 0.2, 'DisplayName', '5-deg Sym Plane');
-
-axis equal;
-xlabel('X'); ylabel('Y'); zlabel('Z');
-title('3D Extruded Boundaries');
+axis equal; xlabel('X'); ylabel('Y'); zlabel('Z');
+title('Full 3D Extrusion (Surfaces, Lines, and Points)');
 legend('show', 'Location', 'eastoutside');
-% You can rotate this plot using the 3D rotation tool in the figure window!
-
-
-
 
 function V_3D = extrude_boundary_edges(V_2D, N_pts)
-    % V_2D: [m x 2] array of 2D edge node indices (e.g., from extractboundary)
-    % N_pts: Total number of vertices in the 2D plane (offset for the 5-deg plane)
-    % V_3D: [2*m x 3] array of 3D triangle node indices
-    
     m = size(V_2D, 1);
     V_3D = zeros(m * 2, 3);
-    
-    % Base nodes
-    n1 = V_2D(:, 1);
-    n2 = V_2D(:, 2);
-    
-    % Top nodes (5-degree plane)
-    n1_top = n1 + N_pts;
-    n2_top = n2 + N_pts;
-    
-    % Split the extruded quadrilateral into two triangles
-    % Triangle 1: [n1, n2, n1_top]
-    V_3D(1:2:end, :) = [n1, n2, n1_top];
-    
-    % Triangle 2: [n2, n2_top, n1_top]
-    V_3D(2:2:end, :) = [n2, n2_top, n1_top];
+    n_a = V_2D(:, 1); n_b = V_2D(:, 2);
+    n_a_top = n_a + N_pts; n_b_top = n_b + N_pts;
+    for i = 1:m
+        if n_a(i) < n_b(i)
+            V_3D(2*i-1, :) = [n_a(i), n_b(i), n_a_top(i)];
+            V_3D(2*i, :)   = [n_b(i), n_b_top(i), n_a_top(i)];
+        else
+            V_3D(2*i-1, :) = [n_a(i), n_b(i), n_b_top(i)];
+            V_3D(2*i, :)   = [n_a(i), n_b_top(i), n_a_top(i)];
+        end
+    end
 end
